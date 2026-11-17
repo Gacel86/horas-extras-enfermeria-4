@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      color: #182230;
+      background: #f4f6fa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1060px; margin: auto; padding: 20px 14px 60px; }
+    .card {
+      background: #fff;
+      border: 1px solid #e4e7ec;
+      border-radius: 14px;
+      padding: 18px;
+      margin: 14px 0;
+    }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin: 0 0 12px; }
+    .muted { color: #667085; font-size: 14px; }
+    button {
+      background: #2459c4;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 13px;
+      cursor: pointer;
+      margin: 4px 4px 4px 0;
+    }
+    button.secondary { background: #475467; }
+    button.danger { background: #b42318; }
+    input, select {
+      padding: 9px 10px;
+      border: 1px solid #cfd4dc;
+      border-radius: 8px;
+      width: 100%;
+      margin: 4px 0 10px;
+    }
+    label { font-size: 13px; font-weight: bold; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+    }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+    }
+    .item {
+      border: 1px solid #e4e7ec;
+      padding: 12px;
+      border-radius: 10px;
+      margin: 8px 0;
+      background: #fff;
+    }
+    .item.especial {
+      background: #fdf6ec;
+      border-color: #e6a23c;
+    }
+    .item.cubierta {
+      background: #f8f9fb;
+    }
+    .hidden { display: none; }
+    .error { color: #b42318; white-space: pre-wrap; margin-top: 8px; }
+    .ok { color: #067647; }
+    .tag {
+      font-size: 12px;
+      background: #eff4ff;
+      color: #175cd3;
+      padding: 4px 8px;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    .tag.especial {
+      background: #fef0c7;
+      color: #b54708;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 8px 0 14px;
+      font-size: 13px;
+    }
+    .tabs button { background: #667085; }
+    .tabs button.active { background: #2459c4; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>Horas Extras de Enfermería</h1>
+    <p class="muted">Ingresá con tu cuenta personal de Google habilitada en el padrón.</p>
+    <div id="signin"></div>
+    <div id="status" class="muted">Esperando inicio de sesión…</div>
+    <div id="error" class="error"></div>
+  </section>
+
+  <div id="app" class="hidden">
+    <section class="card">
+      <strong id="welcome"></strong>
+      <span class="tag" id="role"></span>
+      <span class="tag" id="coverage"></span>
+      <button class="secondary" onclick="refresh()">Actualizar</button>
+    </section>
+
+    <div class="tabs">
+      <button id="staffTab" class="active" onclick="showTab('staff')">Horas extras y calendario</button>
+      <button id="historyTab" onclick="showTab('history')">Historial</button>
+      <button id="adminTab" class="hidden" onclick="showTab('admin')">Administración</button>
+    </div>
+
+    <section id="staff" class="card">
+      <div class="grid">
+        <div>
+          <label>Filtrar por quincena / mes</label>
+          <select id="periodFilter" onchange="renderAllViews()">
+            <option value="">Todas las publicaciones</option>
+          </select>
+        </div>
+        <div>
+          <label>Vista</label>
+          <select id="viewMode" onchange="renderAllViews()">
+            <option value="calendar">Calendario quincenal</option>
+            <option value="list">Listado detallado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="tag">Ordinaria disponible / con cupo</span>
+        <span class="tag especial">Turno especial (asignación jefatura, sin límite ordinario)</span>
+        <span class="muted">Cancelación personal permitida hasta 36 h antes del inicio.</span>
+      </div>
+
+      <h2>Publicaciones y turnos especiales</h2>
+      <div id="offers"></div>
+
+      <h2>Mis ofertas de lista de espera (45 min)</h2>
+      <div id="myoffers"></div>
+
+      <h2>Estadísticas de equidad</h2>
+      <div id="stats"></div>
+    </section>
+
+    <section id="history" class="card hidden">
+      <h2>Historial de modificaciones y auditoría</h2>
+      <div id="historyList"></div>
+    </section>
+
+    <section id="admin" class="card hidden">
+      <h2>Alta / edición de personal</h2>
+      <div class="grid">
+        <div><label>Correo Gmail</label><input id="pemail" type="email"></div>
+        <div><label>Nombre</label><input id="pname"></div>
+        <div><label>Apellido</label><input id="plast"></div>
+        <div>
+          <label>¿Desea extras ordinarias?</label>
+          <select id="pwants">
+            <option value="true">Sí</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="savePerson()">Guardar persona</button>
+
+      <hr>
+      <h2>Publicar hora extra / asignación especial</h2>
+      <div class="grid">
+        <div><label>Fecha</label><input id="date" type="date"></div>
+        <div>
+          <label>Inicio</label>
+          <select id="start">
+            <option>00:00</option>
+            <option>06:00</option>
+            <option>12:00</option>
+            <option>18:00</option>
+            <option>03:00</option>
+            <option>09:00</option>
+            <option>15:00</option>
+            <option>21:00</option>
+          </select>
+        </div>
+        <div>
+          <label>Duración</label>
+          <select id="duration">
+            <option value="6">6 horas</option>
+            <option value="3">3 horas</option>
+          </select>
+        </div>
+        <div><label>Vacantes</label><input id="seats" type="number" min="1" value="1"></div>
+        <div>
+          <label>Tipo</label>
+          <select id="type" onchange="toggleSpecial()">
+            <option value="ORDINARIO">Ordinaria</option>
+            <option value="ESPECIAL">Especial</option>
+          </select>
+        </div>
+        <div><label>Correo asignado (solo especial)</label><input id="assigned" type="email"></div>
+        <div><label>Motivo público / leyenda</label><input id="reason" placeholder="Cobertura jefatura, etc."></div>
+        <div><label>Observación interna</label><input id="internal"></div>
+      </div>
+      <button onclick="createExtra()">Publicar extra</button>
+      <p class="muted">
+        Los turnos especiales se asignan directamente (incluso si el personal marcó que no desea extras) y no cuentan para el límite ordinario.
+      </p>
+
+      <hr>
+      <h2>Informes descargables (CSV)</h2>
+      <div class="grid">
+        <div>
+          <label>Periodo (ej. 2026-11-1, 2026-11-2 o 2026-11; vacío = acumulado)</label>
+          <input id="reportPeriod" placeholder="2026-11-1">
+        </div>
+      </div>
+      <button class="secondary" onclick="downloadCsv()">Descargar informe CSV</button>
+
+      <h2>Personal registrado</h2>
+      <div id="people"></div>
+
+      <h2>Acciones sobre extras</h2>
+      <div id="adminextras"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const GOOGLE_CLIENT_ID = "PEGAR_CLIENT_ID_AQUI";
+const API_URL = "https://horas-extras-api.infopatriotel.workers.dev/api";
+
+let token = null, me = null, currentExtras = [], currentStats = null, currentHistory = [];
+
+function init() {
+  if (!window.google?.accounts?.id) {
+    setTimeout(init, 250);
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: r => login(r.credential)
+  });
+  google.accounts.id.renderButton(document.getElementById("signin"), {
+    theme: "outline",
+    size: "large",
+    text: "signin_with"
+  });
+}
+window.addEventListener("load", init);
+
+async function call(action, ...args) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    body: JSON.stringify({ action, args })
+  });
+  if (!response.ok) {
+    throw new Error("No se pudo conectar con el servicio (" + response.status + ").");
+  }
+  const result = await response.json();
+  if (!result.ok) throw new Error(result.error || "Error del servidor.");
+  return result.data;
+}
+
+async function login(t) {
+  token = t;
+  err("");
+  status("Verificando cuenta…");
+  try {
+    const d = await call("getBootstrapData");
+    me = d.user;
+    document.getElementById("app").classList.remove("hidden");
+    document.getElementById("welcome").textContent = "Hola, " + me.name;
+    document.getElementById("role").textContent = me.role === "admin" ? "Administración" : "Personal";
+    if (me.role === "admin") document.getElementById("adminTab").classList.remove("hidden");
+    await refresh();
+    status("Sesión iniciada: " + me.email);
+  } catch (e) {
+    err(e.message);
+    status("No se pudo iniciar sesión.");
+  }
+}
+
+async function refresh() {
+  err("");
+  try {
+    const d = await call("getBootstrapData");
+    currentExtras = d.extras || [];
+    currentStats = d.stats || { people: [] };
+    currentHistory = d.history || [];
+    populatePeriodSelect(currentExtras);
+    renderAllViews();
+    renderHistory(currentHistory);
+
+    const o = await call("getMyOffers");
+    renderOffers(o);
+
+    if (me.role === "admin") {
+      const a = await call("getAdminData");
+      renderPeople(a.people || []);
+      renderAdminExtras(a.extras || []);
+    }
+  } catch (e) {
+    err(e.message);
+  }
+}
+
+function periodKeyClient(dateStr) {
+  const parts = String(dateStr).slice(0, 10).split("-").map(Number);
+  return parts[0] + "-" + String(parts[1]).padStart(2, "0") + (parts[2] <= 14 ? "-1" : "-2");
+}
+
+function populatePeriodSelect(items) {
+  const sel = document.getElementById("periodFilter");
+  const prev = sel.value;
+  const keys = [...new Set(items.map(x => periodKeyClient(x.fecha)))].sort();
+  sel.innerHTML = `<option value="">Todas las publicaciones</option>` + keys.map(k => {
+    const [y, m, q] = k.split("-");
+    const label = q === "1" ? `${y}-${m} · Quincena 1 (01–14)` : `${y}-${m} · Quincena 2 (15–fin)`;
+    return `<option value="${esc(k)}">${esc(label)}</option>`;
+  }).join("");
+  if (keys.includes(prev)) sel.value = prev;
+}
+
+function renderAllViews() {
+  const pf = document.getElementById("periodFilter").value;
+  const filtered = pf ? currentExtras.filter(x => periodKeyClient(x.fecha) === pf) : currentExtras;
+
+  const totalSeats = filtered.reduce((acc, x) => acc + Number(x.vacantes || 0), 0);
+  const coveredSeats = filtered.reduce((acc, x) => acc + Number(x.cubiertas || 0), 0);
+  const pct = totalSeats ? Math.round((coveredSeats / totalSeats) * 100) : 0;
+  document.getElementById("coverage").textContent = `Cobertura: ${coveredSeats}/${totalSeats} (${pct}%)`;
+
+  renderExtras(filtered);
+  renderStats(currentStats, pf);
+}
+
+function renderExtras(items) {
+  const root = document.getElementById("offers");
+  const mode = document.getElementById("viewMode").value;
+  root.innerHTML = "";
+  if (!items.length) {
+    root.textContent = "No hay publicaciones en este periodo.";
+    return;
+  }
+
+  if (mode === "calendar") {
+    root.className = "cal-grid";
+    const byDay = {};
+    items.forEach(x => {
+      if (!byDay[x.fecha]) byDay[x.fecha] = [];
+      byDay[x.fecha].push(x);
+    });
+    Object.keys(byDay).sort().forEach(day => {
+      const card = document.createElement("div");
+      card.className = "item";
+      card.innerHTML = `<b>Fecha: ${esc(day)}</b>`;
+      byDay[day].forEach(x => card.appendChild(buildExtraCard(x, true)));
+      root.appendChild(card);
+    });
+  } else {
+    root.className = "";
+    items.forEach(x => root.appendChild(buildExtraCard(x, false)));
+  }
+}
+
+function buildExtraCard(x, compact) {
+  const d = document.createElement("div");
+  const isEsp = x.tipo === "ESPECIAL";
+  const isFull = x.cubiertas >= x.vacantes;
+  d.className = "item" + (isEsp ? " especial" : "") + (isFull ? " cubierta" : "");
+
+  const badge = isEsp
+    ? `<span class="tag especial">ESPECIAL</span>`
+    : `<span class="tag">${isFull ? "Cubierta" : "Disponible"}</span>`;
+
+  d.innerHTML = `
+    <div>${badge} <b>${compact ? "" : esc(x.fecha) + " · "}${esc(x.inicio)}–${esc(x.fin)} (${x.duracion} h)</b></div>
+    <div class="muted">Cupos: ${x.cubiertas}/${x.vacantes}</div>
+  `;
+
+  if (isEsp) {
+    d.innerHTML += `<div><b>Asignación especial:</b> ${esc(x.asignadoNombre)}</div>`;
+    if (x.motivoPublico) d.innerHTML += `<div class="muted">Leyenda: ${esc(x.motivoPublico)}</div>`;
+  } else {
+    if (x.myInscription) {
+      d.innerHTML += `<div class="ok">Tu estado: <b>${esc(x.myInscription.estado)}</b></div>`;
+      if (x.myInscription.canSelfCancel) {
+        const cBtn = document.createElement("button");
+        cBtn.className = "danger";
+        cBtn.textContent = "Cancelar mi inscripción";
+        cBtn.onclick = async () => {
+          if (!confirm("¿Cancelar tu inscripción confirmada?")) return;
+          try {
+            const r = await call("cancelMyInscription", x.myInscription.id);
+            alert(r.message);
+            await refresh();
+          } catch (e) {
+            err(e.message);
+          }
+        };
+        d.appendChild(cBtn);
+      }
+    } else {
+      const b = document.createElement("button");
+      b.textContent = "Postulación";
+      b.onclick = () => apply(x.id, "VACANTE");
+      const w = document.createElement("button");
+      w.textContent = "Postulación y lista de espera";
+      w.className = "secondary";
+      w.onclick = () => apply(x.id, "ESPERA");
+      d.append(b, w);
+    }
+  }
+  return d;
+}
+
+async function apply(id, mode) {
+  err("");
+  try {
+    const r = await call("applyForExtra", id, mode);
+    alert(r.message);
+    await refresh();
+  } catch (e) {
+    err(e.message);
+  }
+}
+
+function renderOffers(items) {
+  const r = document.getElementById("myoffers");
+  r.innerHTML = "";
+  if (!items.length) {
+    r.textContent = "No tenés ofertas pendientes.";
+    return;
+  }
+  items.forEach(x => {
+    const b = document.createElement("button");
+    const extraInfo = x.extra ? `${x.extra.fecha} ${x.extra.inicio} (${x.extra.duracion} h)` : x.extraId;
+    b.textContent = `Aceptar vacante ${extraInfo} (vence ${new Date(x.expiresAt).toLocaleTimeString()})`;
+    b.onclick = async () => {
+      try {
+        alert((await call("acceptWaitOffer", x.id)).message);
+        await refresh();
+      } catch (e) {
+        err(e.message);
+      }
+    };
+    r.appendChild(b);
+  });
+}
+
+function renderStats(s, periodFilter) {
+  const r = document.getElementById("stats");
+  r.innerHTML = "";
+  const list = s?.people || [];
+  if (!list.length) {
+    r.textContent = "Sin datos estadísticos.";
+    return;
+  }
+  list.forEach(p => {
+    const rowData = periodFilter && p.byPeriod?.[periodFilter] ? p.byPeriod[periodFilter] : p;
+    const d = document.createElement("div");
+    d.className = "item";
+    d.textContent = `${p.nombre}: ${rowData.voluntary} h voluntarias · ${rowData.special} h especiales · ${rowData.full} completas · ${rowData.half} medios · Total: ${rowData.total} h`;
+    r.appendChild(d);
+  });
+}
+
+function renderHistory(items) {
+  const r = document.getElementById("historyList");
+  if (!items.length) {
+    r.textContent = "Sin registros de auditoría.";
+    return;
+  }
+  r.innerHTML = items.map(h =>
+    `<div class="item"><b>${esc(h.accion)}</b> · ${esc(h.actor)} · <span class="muted">${esc(String(h.timestamp))}</span><div>${esc(h.detalle)}</div></div>`
+  ).join("");
+}
+
+async function savePerson() {
+  err("");
+  try {
+    await call("adminSavePerson", {
+      email: v("pemail"),
+      nombre: v("pname"),
+      apellido: v("plast"),
+      deseaExtras: v("pwants") === "true",
+      activo: true
+    });
+    alert("Personal guardado.");
+    await refresh();
+  } catch (e) {
+    err(e.message);
+  }
+}
+
+async function createExtra() {
+  err("");
+  try {
+    const d = {
+      fecha: v("date"),
+      inicio: v("start"),
+      duracion: Number(v("duration")),
+      vacantes: Number(v("seats")),
+      tipo: v("type"),
+      asignadoEmail: v("assigned"),
+      motivoPublico: v("reason"),
+      motivoInterno: v("internal")
+    };
+    await call("adminCreateExtra", d);
+    alert("Publicación creada.");
+    await refresh();
+  } catch (e) {
+    err(e.message);
+  }
+}
+
+async function downloadCsv() {
+  err("");
+  try {
+    const csv = await call("getReportCsv", v("reportPeriod"));
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "horas_extras_" + (v("reportPeriod") || "acumulado") + ".csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    err(e.message);
+  }
+}
+
+function renderPeople(p) {
+  const r = document.getElementById("people");
+  r.innerHTML = p.map(x =>
+    `<div class="item">${esc(x.nombre)} ${esc(x.apellido)} · ${esc(x.email)} · Desea extras: ${x.deseaExtras}</div>`
+  ).join("") || "Sin personal.";
+}
+
+function renderAdminExtras(xs) {
+  const r = document.getElementById("adminextras");
+  r.innerHTML = "";
+  xs.forEach(x => {
+    const d = document.createElement("div");
+    d.className = "item";
+    d.textContent = `${x.fecha} ${x.inicio} · ${x.duracion} h · ${x.tipo} · ${x.estado}`;
+    if (x.estado !== "CANCELADA") {
+      const b = document.createElement("button");
+      b.textContent = "Cancelar";
+      b.className = "danger";
+      b.onclick = async () => {
+        if (!confirm("¿Cancelar esta publicación?")) return;
+        try {
+          await call("adminCancelExtra", x.id);
+          await refresh();
+        } catch (e) {
+          err(e.message);
+        }
+      };
+      d.appendChild(b);
+    }
+    r.appendChild(d);
+  });
+}
+
+function showTab(t) {
+  ["staff", "history", "admin"].forEach(id => {
+    document.getElementById(id).classList.toggle("hidden", id !== t);
+  });
+  document.getElementById("staffTab").classList.toggle("active", t === "staff");
+  document.getElementById("historyTab").classList.toggle("active", t === "history");
+  document.getElementById("adminTab").classList.toggle("active", t === "admin");
+}
+
+function toggleSpecial() {
+  document.getElementById("assigned").disabled = v("type") !== "ESPECIAL";
+}
+function v(id) { return document.getElementById(id).value; }
+function status(t) { document.getElementById("status").textContent = t; }
+function err(t) { document.getElementById("error").textContent = t; }
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+toggleSpecial();
+</script>
+</body>
+</html>
